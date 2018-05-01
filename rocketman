@@ -30,6 +30,8 @@
 HOSTN=RocketOS 
 LOCALE=America/Sao_Paulo
 ROOT_PASSWD=123456
+USER=rocketman
+USER_PASSWD=123456
 
 # PARTED VARIABLES
 HD=/dev/sda
@@ -47,6 +49,7 @@ EXTRA_PKGS='vim budgie-desktop lightdm lightdm-gtk-greeter terminator'
 
 KEYBOARD_LAYOUT=br-abnt2
 LANGUAGE=pt_BR
+LANGUAGE_UTF=pt_BR.UTF-8
 
 # AUX VARIABLES
 BOOT_START=1
@@ -185,52 +188,94 @@ instalando_sistema
 
 # CHROOT MODE
 arch-chroot /mnt << EOF
-# Configura hostname
-echo $HOSTN > /etc/hostname
-cp /etc/hosts /etc/hosts.bkp
-sed 's/localhost$/localhost '$HOSTN'/' /etc/hosts > /tmp/hosts
-mv /tmp/hosts /etc/hosts
-
-# Configura layout do teclado
-echo 'KEYMAP='$KEYBOARD_LAYOUT > /etc/vconsole.conf
-echo 'FONT=lat0-16' >> /etc/vconsole.conf
-echo 'FONT_MAP=' >> /etc/vconsole.conf
-
 # Configura locale.gen
 cp /etc/locale.gen /etc/locale.gen.bkp
-sed 's/^#'$LANGUAGE'/'$LANGUAGE/ /etc/locale.gen > /tmp/locale
+sed 's/^#'$LANGUAGE_UTF'/'$LANGUAGE_UTF/ /etc/locale.gen > /tmp/locale
 mv /tmp/locale /etc/locale.gen
 locale-gen
 
 # Configura locale.conf
-export LANG=$LANGUAGE'.utf-8'
-echo 'LANG='$LANGUAGE'.utf-8' > /etc/locale.conf
-echo 'LC_COLLATE=C' >> /etc/locale.conf
-echo 'LC_TIME='$LANGUAGE'.utf-8' >> /etc/locale.conf
+export LANG=$LANGUAGE_UTF
+echo 'LANG='$LANGUAGE_UTF > /etc/locale.conf
 
 # Configura hora
 rm -rf /etc/localtime
 ln -s /usr/share/zoneinfo/$LOCALE /etc/localtime
-echo $LOCALE > /etc/timezone
 hwclock --systohc --utc
+
+# Configura hostname
+echo $HOSTN > /etc/hostname
 
 # Configura rede (DHCP via eth0)
 systemctl enable dhcpcd.service
-pacman -Sy --noconfirm openssh
 
-cp /etc/rc.conf /etc/rc.conf.bkp
-sed 's/^# interface=/interface=eth0/' /etc/rc.conf > /tmp/rc.conf
-mv /tmp/rc.conf /etc/rc.conf
+# Instalar e habilitar ssh
+pacman -Sy --noconfirm openssh
+systemctl enable sshd.service
+
+# Altera a senha do usuário root
+echo -e $ROOT_PASSWD"\n"$ROOT_PASSWD | passwd root
+
+# Adiciona usuário
+useradd -m -g users -G wheel -s /bin/bash $USER
+echo -e $USER_PASSWD"\n"$USER_PASSWD | passwd $
+
+# Configura sudoers
+echo $LANGUAGE 'ALL=(ALL) ALL' >> /etc/sudoers
 
 # Configura ambiente ramdisk inicial
 mkinitcpio -p linux
 
+# Configurando pacman
+cp /etc/pacman.d/mirrorlist /etc/pacman.d/mirrorlist.bkp
+sed "s/^Ser/#Ser/" /etc/pacman.d/mirrorlist > /tmp/mirrors
+sed '/Brazil/{n;s/^#//}' /tmp/mirrors > /etc/pacman.d/mirrorlist
+
+if [ "$(uname -m)" = "x86_64" ]
+  then
+    cp /etc/pacman.conf /etc/pacman.conf.bkp
+    # Adiciona o Multilib
+    sed '/^#\[multilib\]/{s/^#//;n;s/^#//;n;s/^#//}' /etc/pacman.conf > /tmp/pacman
+    mv /tmp/pacman /etc/pacman.conf
+  fi
+
+pacman -Syu
+
+gpasswd -a $USER audio
+gpasswd -a $USER video
+gpasswd -a $USER daemon
+gpasswd -a $USER dbus
+gpasswd -a $USER disk
+gpasswd -a $USER games
+gpasswd -a $USER lp
+gpasswd -a $USER network
+gpasswd -a $USER rfkill
+gpasswd -a $USER optical
+gpasswd -a $USER power
+gpasswd -a $USER scanner
+gpasswd -a $USER storage
+
+# Instalando ambiente gráfico
+pacman -S --noconfirm xorg xorg-xinit
+
+# Instalado Budgie Linux
+pacman -S --noconfirm budgie-desktop gnome
+
+# Instalado Lightdm
+pacman -S --noconfirm lightdm lightdm-gtk-greeter
+systemctl enable lightdm.service
+
+# Instalado Programas
+pacman -S --noconfirm firefox qt4 vlc gimp flashplugin gedit archlinux-wallpaper
+
+# Instalando complementos VirtualBox
+pacman -S --noconfirm virtualbox-guest-utils
+systemctl enable vboxservice.service
+
 # Instala e gera configuração do GRUB Legacy
+pacman -S --noconfirm grub
 grub-install /dev/sda
 grub-mkconfig -o /boot/grub/grub.cfg
-
-# Altera a senha do usuário root
-echo -e $ROOT_PASSWD"\n"$ROOT_PASSWD | passwd
 EOF
 
 echo "Umounting partitions"
