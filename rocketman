@@ -35,33 +35,18 @@ USER_PASSWD=123456
 
 # PARTED VARIABLES
 HD=/dev/sda
-BOOT_SIZE=200
-ROOT_SIZE=10000
-SWAP_SIZE=2000
+ROOT_SIZE=8000
 
 # File System
-BOOT_FS=ext4
-HOME_FS=ext4
 ROOT_FS=ext4
-
-# EXTRAS
-EXTRA_PKGS='vim budgie-desktop lightdm lightdm-gtk-greeter terminator'
 
 KEYBOARD_LAYOUT=br-abnt2
 LANGUAGE=pt_BR
 LANGUAGE_UTF=pt_BR.UTF-8
 
 # AUX VARIABLES
-BOOT_START=1
-BOOT_END=$(($BOOT_START+$BOOT_SIZE))
-
-SWAP_START=$BOOT_END
-SWAP_END=$(($SWAP_START+$SWAP_SIZE))
-
-ROOT_START=$SWAP_END
+ROOT_START=1
 ROOT_END=$(($ROOT_START+$ROOT_SIZE))
-
-HOME_START=$ROOT_END
 
 function inicializa_hd
 {
@@ -79,22 +64,9 @@ function inicializa_hd
 function particiona_hd
 {
   ERR=0
-  # Cria partição boot
-  echo "Criando partição boot"
-  parted -s $HD mkpart primary $BOOT_FS $BOOT_START $BOOT_END 1>/dev/null || ERR=1
-  parted -s $HD set 1 boot on 1>/dev/null || ERR=1
-
-  # Cria partição swap
-  echo "Criando partição swap"
-  parted -s $HD mkpart primary linux-swap $SWAP_START $SWAP_END 1>/dev/null || ERR=1
-
   # Cria partição root
   echo "Criando partição root"
   parted -s $HD mkpart primary $ROOT_FS $ROOT_START $ROOT_END 1>/dev/null || ERR=1
-
-  # Cria partição home
-  echo "Criando partição home"
-  parted -s -- $HD mkpart primary $HOME_FS $HOME_START -0 1>/dev/null || ERR=1
 
   if [[ $ERR -eq 1 ]]; then
     echo "Erro durante o particionamento"
@@ -106,16 +78,8 @@ function cria_fs
 {
   ERR=0
   # Formata partições root, home e boot para o File System especificado
-  echo "Formatando partição boot"
-  mkfs.$BOOT_FS /dev/sda1 -L Boot 1>/dev/null || ERR=1
   echo "Formatando partição root"
-  mkfs.$ROOT_FS /dev/sda3 -L Root 1>/dev/null || ERR=1
-  echo "Formatando partição home"
-  mkfs.$HOME_FS /dev/sda4 -L Home 1>/dev/null || ERR=1
-  # Cria e inicia a swap
-  echo "Formatando partição swap"
-  mkswap /dev/sda2 || ERR=1
-  swapon /dev/sda2 || ERR=1
+  mkfs.$ROOT_FS /dev/sda1 -L Root 1>/dev/null || ERR=1
 
   if [[ $ERR -eq 1 ]]; then
     echo "Erro ao criar File Systems"
@@ -128,13 +92,7 @@ function monta_particoes
   ERR=0
   echo "Montando partições"
   # Monta partição root
-  mount /dev/sda3 /mnt || ERR=1
-  # Monta partição boot
-  mkdir /mnt/boot || ERR=1
-  mount /dev/sda1 /mnt/boot || ERR=1
-  # Monta partição home
-  mkdir /mnt/home || ERR=1
-  mount /dev/sda4 /mnt/home || ERR=1
+  mount /dev/sda1 /mnt || ERR=1
 
   if [[ $ERR -eq 1 ]]; then
     echo "Erro ao criar File Systems"
